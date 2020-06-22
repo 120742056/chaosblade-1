@@ -179,12 +179,27 @@ func getJavaBinAndJavaHome(javaHome string, ctx context.Context, pid string) (st
 		javaBin = path.Join(javaHome, "bin/java")
 		return javaBin, javaHome
 	}
-	psArgs := cl.GetPsArgs()
-	response := cl.Run(ctx, "ps", fmt.Sprintf(`%s | grep -w %s | grep java | grep -v grep | awk '{print $4}'`,
-		psArgs, pid))
-	if response.Success {
-		javaBin = strings.TrimSpace(response.Result.(string))
+	// get commands
+	processId, err := strconv.Atoi(pid)
+	if err != nil {
+		logrus.Warningf("convert string value of pid err, %v", err)
+		return javaBin, javaHome
 	}
+	processObj, err := process.NewProcess(int32(processId))
+	if err != nil {
+		logrus.WithField("pid", processId).WithError(err).Warningln("new process by processId err")
+		return javaBin, javaHome
+	}
+	cmdlineSlice, err := processObj.CmdlineSlice()
+	if err != nil {
+		logrus.WithField("pid", processId).WithError(err).Warningln("get command slice err")
+		return javaBin, javaHome
+	}
+	if len(cmdlineSlice) == 0 {
+		logrus.WithField("pid", processId).Warningln("command line is empty")
+		return javaBin, javaHome
+	}
+	javaBin = strings.TrimSpace(cmdlineSlice[0])
 	if strings.HasSuffix(javaBin, "/bin/java") {
 		javaHome = javaBin[:len(javaBin)-9]
 	}
